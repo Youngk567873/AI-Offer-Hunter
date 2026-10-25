@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Offer收割机 - AI求职工作台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 HTML 转 Word 的神器 -->
+    <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%); min-height: 100vh; }
+        .loading { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 物理隐藏，绝对不串台 */
+        .tab-content { display: none !important; }
+        .tab-content.active { display: block !important; animation: fadeIn 0.4s ease-out; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .chat-bubble-user { background: #3b82f6; color: white; align-self: flex-end; border-radius: 16px 16px 0 16px; }
+        .chat-bubble-ai { background: #f1f5f9; color: #1e293b; align-self: flex-start; border-radius: 16px 16px 16px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        /* 👇 终极打印魔法：只留简历，隐藏一切杂项 👇 */
+        @media print {
+            body > *:not(#html-modal) { display: none !important; }
+            #html-modal { 
+                position: absolute !important; top: 0; left: 0; width: 100%; height: 100%; 
+                background: white !important; padding: 0 !important; margin: 0 !important; display: block !important; 
+            }
+            #html-modal > div { 
+                width: 100% !important; height: 100% !important; 
+                border: none !important; box-shadow: none !important; border-radius: 0 !important;
+            }
+            /* 隐藏弹窗上方的黑色标题栏和关闭按钮 */
+            #html-modal > div > div:first-child { display: none !important; }
+        }
+    </style>
+</head>
+<body class="flex">
+
+    <!-- 左侧导航栏 -->
+    <aside class="w-64 bg-white shadow-2xl h-screen fixed left-0 top-0 flex flex-col z-50">
+        <div class="p-6 border-b border-gray-100">
+            <h1 class="text-2xl font-black text-blue-600 tracking-tight">🚀 Offer 收割机</h1>
+            <p class="text-xs text-gray-400 mt-1">求职全链路 AI Agent</p>
+            <div class="mt-5 flex items-center justify-between bg-gray-50 p-2 rounded-xl border border-gray-200">
+                <span class="text-sm font-bold text-gray-500 ml-2">模式:</span>
+                <select id="mode-select" class="bg-transparent border-none text-sm font-bold text-blue-600 outline-none cursor-pointer">
+                    <option value="campus">🎓 校招</option>
+                    <option value="social">💼 社招</option>
+                </select>
+            </div>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="switchTab('resume', this)" class="nav-btn w-full text-left px-4 py-3 rounded-xl bg-blue-50 text-blue-600 font-bold transition shadow-sm border border-blue-100">📄 简历诊断</button>
+            <button onclick="switchTab('hr', this)" class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">💬 HR沟通外挂</button>
+            <button onclick="switchTab('interview', this)" class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">🎤 AI模拟面试</button>
+            <button onclick="switchTab('jobs', this)" class="nav-btn w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 font-medium transition">🧭 岗位推荐</button>
+        </nav>
+        <div class="p-4 text-center text-xs text-gray-400">Powered by DeepSeek</div>
+    </aside>
+
+    <!-- 右侧主内容区 -->
+    <main class="ml-64 flex-1 p-8 overflow-y-auto h-screen">
+        
+        <div class="max-w-5xl mx-auto mb-6">
+            <h2 class="text-3xl font-extrabold text-gray-800">你好，准职场人！👋</h2>
+            <p class="text-gray-500 mt-1">今天准备拿下哪个 Offer？让我们开始吧。</p>
+        </div>
+
+        <!-- 模块 1：简历诊断 -->
+        <div id="resume" class="tab-content active max-w-5xl mx-auto">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                <div class="grid grid-cols-2 gap-6 mb-6">
+                    <textarea id="resume-jd" rows="8" class="p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 text-sm" placeholder="粘贴目标岗位 JD..."></textarea>
+                    <div class="p-6 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col justify-center items-center h-full hover:border-blue-400 transition">
+                        <div class="text-4xl mb-2">📄</div>
+                        <label class="block font-bold mb-2 text-gray-700 text-sm">上传 PDF 简历</label>
+                        <input type="file" id="resume-file" accept=".pdf" class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"/>
+                    </div>
+                </div>
+                
+                <!-- 语言选择 -->
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-sm font-bold text-gray-600">生成网页简历的语言：</span>
+                    <select id="resume-lang" class="bg-gray-50 border border-gray-200 text-sm font-bold rounded-lg px-3 py-2 outline-none cursor-pointer">
+                        <option value="中文">🇨🇳 中文</option>
+                        <option value="英文">🇬🇧 英文</option>
+                        <option value="韩语">🇰🇷 韩语</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-4">
+                    <button onclick="doMatch()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2">
+                        开始诊断 <div id="load-match" class="loading"></div>
+                    </button>
+                    <button onclick="genHtmlResume()" id="btn-gen-html" class="hidden bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2">
+                        ✨ 生成网页版简历 <div id="load-html" class="loading"></div>
+                    </button>
+                </div>
+            </div>
+            <div id="res-match" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 whitespace-pre-wrap text-gray-700 leading-relaxed hidden text-sm"></div>
+        </div>
+
+        <!-- 模块 2：HR 沟通外挂 -->
+        <div id="hr" class="tab-content max-w-3xl mx-auto">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                <div class="space-y-4 mb-6">
+                    <textarea id="hr-jd" rows="4" class="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 text-sm" placeholder="粘贴目标岗位 JD（让AI懂上下文）..."></textarea>
+                    <textarea id="hr-msg" rows="3" class="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 outline-none bg-gray-50 text-sm" placeholder="把 HR 发来的话粘贴在这里（如：你的期望薪资是多少？）"></textarea>
+                </div>
+                <button onclick="doHrReply()" class="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2">
+                    生成高情商回复 <div id="load-hr" class="loading"></div>
+                </button>
+            </div>
+            <div id="res-hr" class="bg-green-50 p-6 rounded-2xl border border-green-200 text-green-900 font-medium text-md hidden relative">
+                <button onclick="copyText('res-hr-text')" class="absolute top-4 right-4 text-xs bg-white text-green-600 px-3 py-1 rounded-lg border border-green-200 shadow-sm hover:bg-green-100">📋 复制</button>
+                <div id="res-hr-text" class="whitespace-pre-wrap pr-12"></div>
+            </div>
+        </div>
+
+        <!-- 模块 3：AI 模拟面试 -->
+        <div id="interview" class="tab-content max-w-5xl mx-auto flex gap-6 h-[600px]">
+            <div class="w-1/2">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-gray-800">面试实况 📹</h3>
+                        <button onclick="toggleCamera()" id="cam-btn" class="text-xs bg-red-100 text-red-600 px-3 py-1.5 rounded-full font-bold transition">📷 摄像头已关</button>
+                    </div>
+                    <video id="webcam" autoplay playsinline class="w-full rounded-xl bg-gray-900 flex-1 object-cover" style="min-height: 300px;"></video>
+                </div>
+            </div>
+            <div class="w-1/2 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-800">面试对话 💬</h3>
+                    <button onclick="endInterview()" class="text-xs bg-orange-100 text-orange-600 px-3 py-1.5 rounded-lg font-bold hover:bg-orange-200">结束面试并打分</button>
+                </div>
+                <textarea id="interview-jd" rows="2" class="w-full p-2 mb-3 text-xs rounded-lg border bg-gray-50 outline-none" placeholder="粘贴JD，然后开始面试..."></textarea>
+                <div id="chat-box" class="flex-1 overflow-y-auto flex flex-col gap-3 p-2 bg-gray-50 rounded-xl border mb-3">
+                    <div class="chat-bubble-ai p-3 text-sm">你好，我是AI面试官。请输入JD后，我们开始面试。</div>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="chat-input" class="flex-1 p-3 border rounded-xl text-sm outline-none bg-gray-50" placeholder="输入你的回答..." onkeypress="handleChatEnter(event)">
+                    <button onclick="toggleVoiceInput()" id="voice-btn" class="bg-gray-200 text-gray-600 px-3 rounded-xl hover:bg-gray-300 transition" title="语音输入">🎙️</button>
+                    <button onclick="sendInterviewMsg()" class="bg-blue-600 text-white px-5 rounded-xl font-bold text-sm shadow-sm">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模块 4：岗位推荐 -->
+        <div id="jobs" class="tab-content max-w-3xl mx-auto">
+            <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-6 text-center">
+                <div class="text-5xl mb-4">🧭</div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">不知道找什么工作？</h3>
+                <p class="text-gray-500 text-sm mb-6">输入你的专业，AI 将为你量身推荐最适合的岗位方向。</p>
+                <div class="flex gap-2 max-w-md mx-auto">
+                    <input type="text" id="major-input" class="flex-1 p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" placeholder="如：计算机科学与技术、市场营销...">
+                    <button onclick="doRecommend()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2">
+                        开始推荐 <div id="load-jobs" class="loading"></div>
+                    </button>
+                </div>
+            </div>
+            <div id="res-jobs" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 whitespace-pre-wrap text-gray-700 leading-relaxed hidden text-sm"></div>
+        </div>
+
+    </main>
+
+    <!-- 网页简历弹窗 -->
+    <div id="html-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-50 flex justify-center items-center">
+        <div class="bg-white w-11/12 h-5/6 rounded-2xl flex flex-col overflow-hidden relative shadow-2xl">
+            <div class="bg-gray-800 text-white p-4 flex justify-between items-center">
+                <span class="font-bold text-sm">✨ 你的定制网页简历</span>
+                <div class="flex gap-3">
+                    <!-- 👇 新增：下载 Word 按钮 👇 -->
+                    <button onclick="downloadWord()" class="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow-sm transition">
+                        📥 下载 Word 版本
+                    </button>
+                    <button onclick="document.getElementById('html-modal').classList.add('hidden')" class="text-gray-300 hover:text-white font-bold text-2xl leading-none">&times;</button>
+                </div>
+            </div>
+            <iframe id="resume-iframe" class="w-full flex-1 border-none bg-white"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量，用来暂存 AI 生成的原始 HTML 代码，方便导出 Word
+        window.rawResumeHtml = ""; 
+
+        function switchTab(tabId, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('bg-blue-50', 'text-blue-600', 'font-bold', 'shadow-sm', 'border', 'border-blue-100');
+                el.classList.add('hover:bg-gray-50', 'text-gray-600', 'font-medium');
+            });
+            document.getElementById(tabId).classList.add('active');
+            btnElement.classList.remove('hover:bg-gray-50', 'text-gray-600', 'font-medium');
+            btnElement.classList.add('bg-blue-50', 'text-blue-600', 'font-bold', 'shadow-sm', 'border', 'border-blue-100');
+        }
+
+        function copyText(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板！'));
+        }
+
+        async function doMatch() {
+            const jd = document.getElementById('resume-jd').value;
+            const mode = document.getElementById('mode-select').value;
+            const fileInput = document.getElementById('resume-file');
+            if(!jd || fileInput.files.length === 0) return alert("请填写 JD 并选择 PDF 简历！");
+            const load = document.getElementById('load-match');
+            const resDiv = document.getElementById('res-match');
+            load.style.display = 'block'; resDiv.classList.add('hidden');
+            const formData = new FormData();
+            formData.append("jd", jd); formData.append("mode", mode); formData.append("file", fileInput.files[0]);
+            try {
+                const resp = await fetch('/api/match', { method: 'POST', body: formData });
+                const data = await resp.json();
+                resDiv.innerText = data.result; resDiv.classList.remove('hidden');
+                window.originalResumeText = data.original_text;
+                document.getElementById('btn-gen-html').classList.remove('hidden');
+            } catch (e) { alert("请求失败"); } finally { load.style.display = 'none'; }
+        }
+
+        async function genHtmlResume() {
+            const jd = document.getElementById('resume-jd').value;
+            const resText = document.getElementById('res-match').innerText;
+            const lang = document.getElementById('resume-lang').value;
+            const load = document.getElementById('load-html');
+            load.style.display = 'block';
+            try {
+                const resp = await fetch('/api/gen_html_resume', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        jd: jd, 
+                        original_text: window.originalResumeText, 
+                        diagnosis_text: resText,
+                        target_lang: lang 
+                    })
+                });
+                const data = await resp.json();
+                
+                let cleanHtml = data.html;
+                if (cleanHtml.includes('<!DOCTYPE html>')) {
+                    cleanHtml = cleanHtml.substring(cleanHtml.indexOf('<!DOCTYPE html>'));
+                } else if (cleanHtml.includes('<html>')) {
+                    cleanHtml = cleanHtml.substring(cleanHtml.indexOf('<html>'));
+                }
+
+                // 把清理干净的 HTML 存到全局变量里，供 Word 导出使用
+                window.rawResumeHtml = cleanHtml; 
+                document.getElementById('resume-iframe').srcdoc = cleanHtml;
+                document.getElementById('html-modal').classList.remove('hidden');
+            } catch (e) { alert("生成失败"); } finally { load.style.display = 'none'; }
+        }
+
+        // 👇 新增：把 HTML 导出为 Word 文件的函数 👇
+        function downloadWord() {
+            if (!window.rawResumeHtml) {
+                alert("暂无简历内容，请先生成！");
+                return;
+            }
+
+            // 为了让 Word 兼容性最好，我们在最外层包一个简单的样式
+            const fullHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        @page { size: A4; margin: 2cm; }
+                        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; color: #333; }
+                        /* 防止 AI 生成的一些奇葩定位在 Word 里乱飘 */
+                        * { position: relative !important; float: none !important; }
+                    </style>
+                </head>
+                <body>
+                    ${window.rawResumeHtml}
+                </body>
+                </html>
+            `;
+
+            // 调用神器转换并下载
+            const converted = htmlDocx.asBlob(fullHtml);
+            const url = URL.createObjectURL(converted);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '我的定制简历.docx'; // 文件下载名
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function doHrReply() {
+            const jd = document.getElementById('hr-jd').value;
+            const msg = document.getElementById('hr-msg').value;
+            const mode = document.getElementById('mode-select').value;
+            if(!jd || !msg) return alert("请填写完整！");
+            const load = document.getElementById('load-hr');
+            const resDiv = document.getElementById('res-hr');
+            load.style.display = 'block'; resDiv.classList.add('hidden');
+            try {
+                const resp = await fetch('/api/hr_reply', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ jd: jd, hr_message: msg, mode: mode })
+                });
+                const data = await resp.json();
+                document.getElementById('res-hr-text').innerText = data.result;
+                resDiv.classList.remove('hidden');
+            } catch (e) { alert("请求失败"); } finally { load.style.display = 'none'; }
+        }
+
+        let videoStream = null, interviewHistory = [], recognition = null;
+
+        async function toggleCamera() {
+            const video = document.getElementById('webcam'), btn = document.getElementById('cam-btn');
+            if (videoStream) {
+                videoStream.getTracks().forEach(t => t.stop());
+                video.srcObject = null; videoStream = null;
+                btn.innerText = "📷 摄像头已关";
+                btn.classList.replace('bg-green-100', 'bg-red-100'); btn.classList.replace('text-green-600', 'text-red-600');
+            } else {
+                try {
+                    videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = videoStream;
+                    btn.innerText = "🟢 摄像头已开";
+                    btn.classList.replace('bg-red-100', 'bg-green-100'); btn.classList.replace('text-red-600', 'text-green-600');
+                } catch (err) { alert("请检查浏览器摄像头权限！"); }
+            }
+        }
+
+        function handleChatEnter(e) { if (e.key === 'Enter') sendInterviewMsg(); }
+
+        function toggleVoiceInput() {
+            const btn = document.getElementById('voice-btn');
+            const input = document.getElementById('chat-input');
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return alert("您的浏览器不支持语音识别，请使用 Chrome 或 Edge。");
+            if (recognition) {
+                recognition.stop(); recognition = null;
+                btn.classList.replace('bg-red-500', 'bg-gray-200'); btn.classList.replace('text-white', 'text-gray-600');
+                return;
+            }
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-CN';
+            recognition.onstart = () => { btn.classList.replace('bg-gray-200', 'bg-red-500'); btn.classList.replace('text-gray-600', 'text-white'); };
+            recognition.onresult = (event) => { input.value = event.results[0][0].transcript; };
+            recognition.onend = () => { btn.classList.replace('bg-red-500', 'bg-gray-200'); btn.classList.replace('text-white', 'text-gray-600'); recognition = null; };
+            recognition.start();
+        }
+
+        function speakText(text) {
+            const synth = window.speechSynthesis;
+            if (!synth) return;
+            const utterThis = new SpeechSynthesisUtterance(text);
+            utterThis.lang = 'zh-CN'; utterThis.rate = 1.1; synth.speak(utterThis);
+        }
+
+        async function sendInterviewMsg() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            const jd = document.getElementById('interview-jd').value;
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML += `<div class="chat-bubble-user p-3 text-sm">${text}</div>`;
+            input.value = ''; chatBox.scrollTop = chatBox.scrollHeight;
+            interviewHistory.push({"role": "user", "content": text});
+            try {
+                const resp = await fetch('/api/interview', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ jd: jd, history: interviewHistory, is_end: false })
+                });
+                const data = await resp.json();
+                chatBox.innerHTML += `<div class="chat-bubble-ai p-3 text-sm">${data.reply}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+                interviewHistory.push({"role": "assistant", "content": data.reply});
+                speakText(data.reply.substring(0, 100)); 
+            } catch (e) { alert("网络异常"); }
+        }
+
+        async function endInterview() {
+            if(interviewHistory.length === 0) return alert("还没开始面试呢！");
+            const jd = document.getElementById('interview-jd').value;
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML += `<div class="text-center text-xs text-gray-400 my-2">正在生成评估报告...</div>`;
+            try {
+                const resp = await fetch('/api/interview', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ jd: jd, history: interviewHistory, is_end: true })
+                });
+                const data = await resp.json();
+                chatBox.innerHTML += `<div class="chat-bubble-ai p-4 text-sm bg-orange-50 text-orange-900 border border-orange-200"><b>📊 面试评估报告：</b><br><br>${data.reply.replace(/\n/g, '<br>')}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) { alert("生成失败"); }
+        }
+
+        async function doRecommend() {
+            const major = document.getElementById('major-input').value.trim();
+            const mode = document.getElementById('mode-select').value;
+            if(!major) return alert("请输入你的专业！");
+            const load = document.getElementById('load-jobs');
+            const resDiv = document.getElementById('res-jobs');
+            load.style.display = 'block'; resDiv.classList.add('hidden');
+            try {
+                const resp = await fetch('/api/recommend_jobs', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ major: major, mode: mode })
+                });
+                const data = await resp.json();
+                resDiv.innerText = data.result;
+                resDiv.classList.remove('hidden');
+            } catch (e) { alert("请求失败"); } finally { load.style.display = 'none'; }
+        }
+    </script>
+</body>
+</html>
